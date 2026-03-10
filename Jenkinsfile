@@ -20,6 +20,13 @@ pipeline {
 
     stages {
 
+        stage('AI Error Analysis') {
+  steps {
+    explainError()
+  }
+}
+
+
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
