@@ -36,7 +36,7 @@ pipeline {
                     -Dsonar.projectKey=nodejsmysql \
                     -Dsonar.projectName=nodejsmysql \
                     -Dsonar.sources=. \
-                    -Dsonar.exclusions=**/*.java,node_modules/**
+                    -Dsonar.java.binaries=.
                     """
                 }
             }
@@ -75,7 +75,7 @@ pipeline {
                     namespace: "${KUBE_NAMESPACE}",
                     serverUrl: 'https://46743932FDE6B34C74566F392E30CABA.gr7.ap-south-1.eks.amazonaws.com'
                 ) {
-                    sh "kubectl apply -f mysql-ds.yml -n ${KUBE_NAMESPACE}"
+                    sh "kubectl apply -f mysql-ds.yml"
                 }
             }
         }
@@ -89,7 +89,7 @@ pipeline {
                 ) {
                     sh """
                     if ! kubectl get svc bankapp-service -n ${KUBE_NAMESPACE}; then
-                        kubectl apply -f bankapp-service.yml -n ${KUBE_NAMESPACE}
+                        kubectl apply -f bankapp-service.yml
                     fi
                     """
                 }
@@ -100,21 +100,16 @@ pipeline {
             steps {
                 script {
 
-                    def deployFile = ""
-
-                    if (params.DEPLOY_ENV == "blue") {
-                        deployFile = "app-deployment-blue.yml"
-                    } else {
-                        deployFile = "app-deployment-green.yml"
-                    }
+                    def deployFile = params.DEPLOY_ENV == "blue" ? 
+                        "app-deployment-blue.yml" : 
+                        "app-deployment-green.yml"
 
                     withKubeConfig(
                         credentialsId: 'k8-token',
                         namespace: "${KUBE_NAMESPACE}",
                         serverUrl: 'https://46743932FDE6B34C74566F392E30CABA.gr7.ap-south-1.eks.amazonaws.com'
                     ) {
-
-                        sh "kubectl apply -f ${deployFile} -n ${KUBE_NAMESPACE}"
+                        sh "kubectl apply -f ${deployFile}"
                     }
                 }
             }
@@ -135,11 +130,9 @@ pipeline {
                         namespace: "${KUBE_NAMESPACE}",
                         serverUrl: 'https://46743932FDE6B34C74566F392E30CABA.gr7.ap-south-1.eks.amazonaws.com'
                     ) {
-
                         sh """
                         kubectl patch service bankapp-service \
-                        -p '{"spec":{"selector":{"app":"bankapp","version":"${newEnv}"}}}' \
-                        -n ${KUBE_NAMESPACE}
+                        -p '{"spec":{"selector":{"app":"bankapp","version":"${newEnv}"}}}'
                         """
                     }
 
@@ -150,34 +143,17 @@ pipeline {
 
         stage('Verify Deployment') {
             steps {
-
-                script {
-
-                    def verifyEnv = params.DEPLOY_ENV
-
-                    withKubeConfig(
-                        credentialsId: 'k8-token',
-                        namespace: "${KUBE_NAMESPACE}",
-                        serverUrl: 'https://46743932FDE6B34C74566F392E30CABA.gr7.ap-south-1.eks.amazonaws.com'
-                    ) {
-
-                        sh """
-                        kubectl get pods -l version=${verifyEnv} -n ${KUBE_NAMESPACE}
-                        kubectl get svc bankapp-service -n ${KUBE_NAMESPACE}
-                        """
-                    }
+                withKubeConfig(
+                    credentialsId: 'k8-token',
+                    namespace: "${KUBE_NAMESPACE}",
+                    serverUrl: 'https://46743932FDE6B34C74566F392E30CABA.gr7.ap-south-1.eks.amazonaws.com'
+                ) {
+                    sh """
+                    kubectl get pods -l version=${params.DEPLOY_ENV} -n ${KUBE_NAMESPACE}
+                    kubectl get svc bankapp-service -n ${KUBE_NAMESPACE}
+                    """
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            echo "✅ Deployment completed successfully."
-        }
-
-        failure {
-            echo "❌ Pipeline failed. Please check logs for troubleshooting."
         }
     }
 }
