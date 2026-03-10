@@ -6,7 +6,7 @@ pipeline {
     }
 
     parameters {
-        choice(name: 'DEPLOY_ENV', choices: ['blue','green'], description: 'Deploy to which environment')
+        choice(name: 'DEPLOY_ENV', choices: ['blue','green'], description: 'Deploy environment')
         choice(name: 'DOCKER_TAG', choices: ['blue','green'], description: 'Docker image tag')
         booleanParam(name: 'SWITCH_TRAFFIC', defaultValue: false, description: 'Switch traffic')
     }
@@ -20,13 +20,6 @@ pipeline {
 
     stages {
 
-        stage('AI Error Analysis') {
-  steps {
-    explainError()
-  }
-}
-
-
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
@@ -37,6 +30,7 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
+                sh "echo 'Running SonarQube Scan...'"
                 withSonarQubeEnv('sonar') {
                     sh """
                     ${SCANNER_HOME}/bin/sonar-scanner \
@@ -80,7 +74,7 @@ pipeline {
                     namespace: "${KUBE_NAMESPACE}",
                     serverUrl: 'https://46743932FDE6B34C74566F392E30CABA.gr7.ap-south-1.eks.amazonaws.com'
                 ) {
-                    sh "kubectl apply -f mysql-ds.yml -n ${KUBE_NAMESPACE}"
+                    sh "kubectl apply -f mysql-ds.yml"
                 }
             }
         }
@@ -94,7 +88,7 @@ pipeline {
                 ) {
                     sh """
                     if ! kubectl get svc bankapp-service -n ${KUBE_NAMESPACE}; then
-                        kubectl apply -f bankapp-service.yml -n ${KUBE_NAMESPACE}
+                        kubectl apply -f bankapp-service.yml
                     fi
                     """
                 }
@@ -105,13 +99,9 @@ pipeline {
             steps {
                 script {
 
-                    def deployFile = ""
-
-                    if (params.DEPLOY_ENV == "blue") {
-                        deployFile = "app-deployment-blue.yml"
-                    } else {
-                        deployFile = "app-deployment-green.yml"
-                    }
+                    def deployFile = params.DEPLOY_ENV == "blue" ? 
+                        "app-deployment-blue.yml" : 
+                        "app-deployment-green.yml"
 
                     withKubeConfig(
                         credentialsId: 'k8-token',
@@ -119,7 +109,7 @@ pipeline {
                         serverUrl: 'https://46743932FDE6B34C74566F392E30CABA.gr7.ap-south-1.eks.amazonaws.com'
                     ) {
 
-                        sh "kubectl apply -f ${deployFile} -n ${KUBE_NAMESPACE}"
+                        sh "kubectl apply -f ${deployFile}"
                     }
                 }
             }
@@ -143,8 +133,7 @@ pipeline {
 
                         sh """
                         kubectl patch service bankapp-service \
-                        -p '{"spec":{"selector":{"app":"bankapp","version":"${newEnv}"}}}' \
-                        -n ${KUBE_NAMESPACE}
+                        -p '{"spec":{"selector":{"app":"bankapp","version":"${newEnv}"}}}'
                         """
                     }
 
@@ -155,23 +144,99 @@ pipeline {
 
         stage('Verify Deployment') {
             steps {
-
-                script {
-
-                    def verifyEnv = params.DEPLOY_ENV
-
-                    withKubeConfig(
-                        credentialsId: 'k8-token',
-                        namespace: "${KUBE_NAMESPACE}",
-                        serverUrl: 'https://46743932FDE6B34C74566F392E30CABA.gr7.ap-south-1.eks.amazonaws.com'
-                    ) {
-
-                        sh """
-                        kubectl get pods -l version=${verifyEnv} -n ${KUBE_NAMESPACE}
-                        kubectl get svc bankapp-service -n ${KUBE_NAMESPACE}
-                        """
-                    }
+                withKubeConfig(
+                    credentialsId: 'k8-token',
+                    namespace: "${KUBE_NAMESPACE}",
+                    serverUrl: 'https://46743932FDE6B34C74566F392E30CABA.gr7.ap-south-1.eks.amazonaws.com'
+                ) {
+                    sh """
+                    kubectl get pods -n ${KUBE_NAMESPACE}
+                    kubectl get svc bankapp-service
+                    """
                 }
+            }
+        }
+    }
+
+    post {
+
+        failure {
+
+            script {
+
+                echo "================ AI ERROR ANALYSIS ================"
+
+                def log = currentBuild.rawBuild.getLog(100)
+
+                if (log.toString().contains("sonar-scanner")) {
+
+                    echo """
+❌ SonarQube Scanner Failed
+
+Possible Cause:
+Sonar Scanner not installed or Sonar server not configured.
+
+Fix:
+
+Manage Jenkins → Global Tool Configuration
+Add SonarScanner
+
+OR install manually:
+
+sudo apt install sonar-scanner
+"""
+                }
+
+                else if (log.toString().contains("trivy")) {
+
+                    echo """
+❌ Trivy not installed
+
+Fix:
+
+wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.48.3_Linux-64bit.deb
+sudo dpkg -i trivy*.deb
+"""
+                }
+
+                else if (log.toString().contains("docker")) {
+
+                    echo """
+❌ Docker Failure
+
+Check if Docker is installed and Jenkins user has permission.
+
+Fix:
+
+sudo usermod -aG docker jenkins
+sudo systemctl restart docker
+sudo systemctl restart jenkins
+"""
+                }
+
+                else if (log.toString().contains("kubectl")) {
+
+                    echo """
+❌ Kubernetes connection failed
+
+Check kubeconfig credentials.
+
+Test manually:
+
+kubectl get nodes
+"""
+                }
+
+                else {
+
+                    echo """
+Unknown failure.
+
+Check full pipeline logs.
+"""
+                }
+
+                echo "=================================================="
             }
         }
     }
