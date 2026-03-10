@@ -1,0 +1,23 @@
+<div id="envBanner" style="padding:10px;color:white;font-weight:bold"></div>
+
+<script>
+fetch('/env')
+.then(res => res.text())
+.then(env => {
+
+    const banner = document.getElementById("envBanner");
+
+    banner.innerText = "Environment: " + env;
+
+    if(env === "BLUE"){
+        document.body.style.backgroundColor = "#d6ecff";
+        banner.style.backgroundColor = "blue";
+    }
+
+    if(env === "GREEN"){
+        document.body.style.backgroundColor = "#d6ffd9";
+        banner.style.backgroundColor = "green";
+    }
+
+});
+</script>
