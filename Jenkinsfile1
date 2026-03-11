@@ -7,16 +7,17 @@ pipeline {
 
     environment {
         IMAGE_NAME = "mydocker3692/bankapp"
-        TAG = "${BUILD_NUMBER}"
+        BLUE_TAG = "blue"
+        GREEN_TAG = "green"
         KUBE_NAMESPACE = "webapps"
         MAVEN_HOME = tool 'maven'
         SCANNER_HOME = tool 'sonar-scanner'
         KUBECONFIG = "/var/lib/jenkins/.kube/config"
         TRIVY_CACHE_DIR = "/var/lib/jenkins/trivycache"
+        DOCKER_CREDS = credentials('docker') 
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
@@ -31,159 +32,89 @@ pipeline {
             }
         }
 
-        stage('Security & Code Analysis') {
+        stage('Security Analysis') {
             parallel {
-
-                stage('Trivy Fast Scan') {
-                    steps {
-                        sh """
-                        trivy fs \
-                        --cache-dir ${TRIVY_CACHE_DIR} \
-                        --skip-db-update \
-                        --scanners vuln \
-                        --severity HIGH,CRITICAL \
-                        --no-progress .
-                        """
-                    }
+                stage('Trivy Scan') {
+                    steps { sh "trivy fs --cache-dir ${TRIVY_CACHE_DIR} --severity HIGH,CRITICAL --no-progress ." }
                 }
-
-                stage('SonarQube Analysis') {
+                stage('SonarQube') {
                     steps {
                         withSonarQubeEnv('sonar') {
-                            sh """
-                            ${SCANNER_HOME}/bin/sonar-scanner \
-                            -Dsonar.projectKey=nodejsmysql \
-                            -Dsonar.sources=.
-                            """
+                            sh "${SCANNER_HOME}/bin/sonar-scanner -Dsonar.projectKey=bankapp -Dsonar.sources=."
                         }
                     }
                 }
             }
         }
 
-        stage('Docker Build') {
+        stage('Docker Build & Push') {
             steps {
                 sh """
-                docker build \
-                --cache-from ${IMAGE_NAME}:latest \
-                -t ${IMAGE_NAME}:${TAG} .
+                echo "${DOCKER_CREDS_PSW}" | docker login -u "${DOCKER_CREDS_USR}" --password-stdin
+                
+                docker build -t ${IMAGE_NAME}:${BLUE_TAG} .
+                docker push ${IMAGE_NAME}:${BLUE_TAG}
+
+                docker build -t ${IMAGE_NAME}:${GREEN_TAG} .
+                docker push ${IMAGE_NAME}:${GREEN_TAG}
                 """
             }
         }
 
-        stage('Trivy Image Scan (Fast)') {
-            steps {
-                sh """
-                trivy image \
-                --cache-dir ${TRIVY_CACHE_DIR} \
-                --skip-db-update \
-                --scanners vuln \
-                --severity HIGH,CRITICAL \
-                --no-progress \
-                ${IMAGE_NAME}:${TAG}
-                """
-            }
-        }
-
-        stage('Prepare Kubernetes (Namespace + Service)') {
+        stage('Prepare K8s & MySQL') {
             steps {
                 sh '''
                 export KUBECONFIG=${KUBECONFIG}
-
-                echo "Creating namespace if not exists..."
+                
+                echo "1. Creating Namespace..."
                 kubectl create namespace ${KUBE_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 
-                echo "Creating service..."
+                echo "2. Deploying MySQL (Requirement for both Blue/Green)..."
+                # This applies your mysql-ds.yml which should contain Deployment + Service + PVC
+                kubectl apply -f mysql-ds.yml -n ${KUBE_NAMESPACE}
+
+                echo "3. Waiting for MySQL to be ready..."
+                kubectl rollout status deployment/mysql -n ${KUBE_NAMESPACE} --timeout=120s
+
+                echo "4. Applying App Service..."
                 kubectl apply -f bankapp-service.yml -n ${KUBE_NAMESPACE}
                 '''
             }
         }
 
-        stage('Deploy BLUE Version (Active)') {
+        stage('Deploy BLUE (Active)') {
             steps {
                 sh '''
                 export KUBECONFIG=${KUBECONFIG}
-
-                echo "Deploying BLUE version"
-
                 kubectl apply -f app-deployment-blue.yml -n ${KUBE_NAMESPACE}
-
                 kubectl rollout status deployment/bankapp-blue -n ${KUBE_NAMESPACE}
-
-                echo "Routing traffic to BLUE"
-
-                kubectl patch svc bankapp-service \
-                -n ${KUBE_NAMESPACE} \
+                
+                # Ensure traffic starts at Blue
+                kubectl patch svc bankapp-service -n ${KUBE_NAMESPACE} \
                 -p '{"spec":{"selector":{"app":"bankapp","version":"blue"}}}'
                 '''
             }
         }
 
-        stage('Show Current Active Version') {
+        stage('Deploy GREEN (Idle)') {
             steps {
                 sh '''
                 export KUBECONFIG=${KUBECONFIG}
-
-                echo "Currently serving version:"
-
-                kubectl get svc bankapp-service \
-                -n ${KUBE_NAMESPACE} \
-                -o jsonpath='{.spec.selector.version}'
-
-                echo ""
-                '''
-            }
-        }
-
-        stage('Deploy GREEN Version (Idle)') {
-            steps {
-                sh '''
-                export KUBECONFIG=${KUBECONFIG}
-
-                echo "Deploying GREEN version (idle)"
-
                 kubectl apply -f app-deployment-green.yml -n ${KUBE_NAMESPACE}
-
                 kubectl rollout status deployment/bankapp-green -n ${KUBE_NAMESPACE}
                 '''
             }
         }
 
-        stage('Validation Window') {
+        stage('Validation & Switch') {
             steps {
-                echo "Waiting 2 minutes before switching traffic..."
+                echo "Blue is Live. Green is ready. Switching in 2 minute..."
                 sleep(time: 2, unit: 'MINUTES')
-            }
-        }
-
-        stage('Switch Traffic BLUE → GREEN') {
-            steps {
+                
                 sh '''
                 export KUBECONFIG=${KUBECONFIG}
-
-                echo "Switching traffic to GREEN"
-
-                kubectl patch svc bankapp-service \
-                -n ${KUBE_NAMESPACE} \
+                kubectl patch svc bankapp-service -n ${KUBE_NAMESPACE} \
                 -p '{"spec":{"selector":{"app":"bankapp","version":"green"}}}'
-                '''
-            }
-        }
-
-        stage('Verify Traffic Switch') {
-            steps {
-                sh '''
-                export KUBECONFIG=${KUBECONFIG}
-
-                echo "Active version after switch:"
-
-                kubectl get svc bankapp-service \
-                -n ${KUBE_NAMESPACE} \
-                -o jsonpath='{.spec.selector.version}'
-
-                echo ""
-                echo "Running Pods:"
-                kubectl get pods -n ${KUBE_NAMESPACE} -o wide
                 '''
             }
         }
