@@ -35,7 +35,17 @@ pipeline {
         stage('Security Analysis') {
             parallel {
                 stage('Trivy Scan') {
-                    steps { sh "trivy fs --cache-dir ${TRIVY_CACHE_DIR} --severity HIGH,CRITICAL --no-progress ." }
+                    steps { 
+                        // Modified: Added --skip-dirs .scannerwork to prevent the "stat" error
+                        sh """
+                        trivy fs \
+                        --cache-dir ${TRIVY_CACHE_DIR} \
+                        --skip-dirs .scannerwork \
+                        --scanners vuln \
+                        --severity HIGH,CRITICAL \
+                        --no-progress .
+                        """
+                    }
                 }
                 stage('SonarQube') {
                     steps {
@@ -69,8 +79,7 @@ pipeline {
                 echo "1. Creating Namespace..."
                 kubectl create namespace ${KUBE_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 
-                echo "2. Deploying MySQL (Requirement for both Blue/Green)..."
-                # This applies your mysql-ds.yml which should contain Deployment + Service + PVC
+                echo "2. Deploying MySQL..."
                 kubectl apply -f mysql-ds.yml -n ${KUBE_NAMESPACE}
 
                 echo "3. Waiting for MySQL to be ready..."
@@ -89,7 +98,6 @@ pipeline {
                 kubectl apply -f app-deployment-blue.yml -n ${KUBE_NAMESPACE}
                 kubectl rollout status deployment/bankapp-blue -n ${KUBE_NAMESPACE}
                 
-                # Ensure traffic starts at Blue
                 kubectl patch svc bankapp-service -n ${KUBE_NAMESPACE} \
                 -p '{"spec":{"selector":{"app":"bankapp","version":"blue"}}}'
                 '''
@@ -108,7 +116,7 @@ pipeline {
 
         stage('Validation & Switch') {
             steps {
-                echo "Blue is Live. Green is ready. Switching in 2 minute..."
+                echo "Blue is Live. Green is ready. Switching in 2 minutes..."
                 sleep(time: 2, unit: 'MINUTES')
                 
                 sh '''
