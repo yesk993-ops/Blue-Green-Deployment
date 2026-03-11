@@ -6,21 +6,18 @@
     <style>
         body {
             font-family: 'Arial', sans-serif;
+            /* Default fallback gradient */
             background: linear-gradient(to right, #000000, #ffd700);
             color: #ffffff;
             margin: 0;
             padding: 0;
-            height: 100vh;
+            min-height: 100vh;
             display: flex;
-            justify-content: center;
-            align-items: center;
             flex-direction: column;
         }
 
         .navbar-custom {
-            background-color: rgba(0, 0, 0, 0.7);
-            position: fixed;
-            top: 0;
+            background-color: rgba(0, 0, 0, 0.9);
             width: 100%;
             z-index: 1000;
         }
@@ -33,20 +30,39 @@
             font-weight: bold;
         }
 
-        .dashboard-container {
-            max-width: 1000px;
-            margin-top: 50px;
+        /* Dynamic Environment Banner */
+        #envBanner {
             text-align: center;
+            padding: 8px;
+            font-weight: bold;
+            color: white;
+            width: 100%;
+            background-color: #333;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
-        h2, h3 {
+        .dashboard-container {
+            max-width: 1000px;
+            margin: 40px auto;
+            text-align: center;
+            flex: 1;
+        }
+
+        .account-details, .form-container {
+            background-color: rgba(255, 255, 255, 0.15);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
             margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .btn-primary {
             background-color: #000000;
-            border: none;
-            transition: background-color 0.3s ease;
+            border: 1px solid #ffd700;
+            color: #ffd700;
+            transition: all 0.3s ease;
         }
 
         .btn-primary:hover {
@@ -59,62 +75,23 @@
             border: none;
         }
 
-        .btn-success:hover {
-            background-color: #218838;
-        }
-
-        .form-container {
-            background-color: rgba(255, 255, 255, 0.1);
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .account-details {
-            background-color: rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
-        }
-
         .error {
             color: #ff4c4c;
-        }
-
-        .footer {
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 15px 0;
-            font-size: 14px;
-            position: fixed;
-            bottom: 0;
-            width: 100%;
-            text-align: center;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
-        }
-
-        .footer a {
-            color: #ffd700;
-            text-decoration: none;
             font-weight: bold;
         }
 
-        .footer a:hover {
-            color: #ffecb3;
-            text-decoration: underline;
-        }
-
-        @keyframes shake {
-            0% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            50% { transform: translateX(5px); }
-            75% { transform: translateX(-5px); }
-            100% { transform: translateX(0); }
+        .footer {
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 0;
+            font-size: 14px;
+            width: 100%;
+            text-align: center;
         }
     </style>
 </head>
-<body>
+<body id="mainBody">
+
 <nav class="navbar navbar-expand-lg navbar-custom">
     <a class="navbar-brand" href="#">Goldencat Bank</a>
     <ul class="navbar-nav ml-auto">
@@ -124,23 +101,23 @@
     </ul>
 </nav>
 
+<div id="envBanner">Detecting Deployment Version...</div>
+
 <div class="container dashboard-container">
-    <div class="text-center">
+    <div class="text-center mb-4">
         <h2 th:text="'Welcome, ' + ${account.username}"></h2>
         <h3 th:text="'Current Balance: $' + ${account.balance}"></h3>
     </div>
 
-    <!-- Account Details Section -->
     <div class="account-details">
         <h4>Account Details</h4>
-        <p><strong>Account Number:</strong> <span th:text="${account.id}"></span></p> <!-- Use account.id for account number -->
+        <p><strong>Account Number:</strong> <span th:text="${account.id}"></span></p>
         <p><strong>Account Type:</strong> Savings</p>
     </div>
 
     <div class="row justify-content-center">
-        <!-- Deposit Section -->
-        <div class="col-md-3">
-            <button class="btn btn-block btn-primary" type="button" data-toggle="collapse" data-target="#depositForm" aria-expanded="false" aria-controls="depositForm">
+        <div class="col-md-4 mb-3">
+            <button class="btn btn-block btn-primary" type="button" data-toggle="collapse" data-target="#depositForm">
                 Deposit
             </button>
             <div class="collapse mt-3" id="depositForm">
@@ -149,14 +126,13 @@
                         <label>Amount:</label>
                         <input type="number" class="form-control" name="amount" required />
                     </div>
-                    <button type="submit" class="btn btn-block btn-success">Submit</button>
+                    <button type="submit" class="btn btn-block btn-success">Submit Deposit</button>
                 </form>
             </div>
         </div>
 
-        <!-- Withdraw Section -->
-        <div class="col-md-3">
-            <button class="btn btn-block btn-primary" type="button" data-toggle="collapse" data-target="#withdrawForm" aria-expanded="false" aria-controls="withdrawForm">
+        <div class="col-md-4 mb-3">
+            <button class="btn btn-block btn-primary" type="button" data-toggle="collapse" data-target="#withdrawForm">
                 Withdraw
             </button>
             <div class="collapse mt-3" id="withdrawForm">
@@ -165,14 +141,13 @@
                         <label>Amount:</label>
                         <input type="number" class="form-control" name="amount" required />
                     </div>
-                    <button type="submit" class="btn btn-block btn-success">Submit</button>
+                    <button type="submit" class="btn btn-block btn-success">Submit Withdrawal</button>
                 </form>
             </div>
         </div>
 
-        <!-- Transfer Section -->
-        <div class="col-md-3">
-            <button class="btn btn-block btn-primary" type="button" data-toggle="collapse" data-target="#transferForm" aria-expanded="false" aria-controls="transferForm">
+        <div class="col-md-4 mb-3">
+            <button class="btn btn-block btn-primary" type="button" data-toggle="collapse" data-target="#transferForm">
                 Transfer Money
             </button>
             <div class="collapse mt-3" id="transferForm">
@@ -185,7 +160,7 @@
                         <label>Amount:</label>
                         <input type="number" class="form-control" name="amount" required />
                     </div>
-                    <button type="submit" class="btn btn-block btn-success">Submit</button>
+                    <button type="submit" class="btn btn-block btn-success">Submit Transfer</button>
                 </form>
             </div>
         </div>
@@ -194,8 +169,39 @@
     <p th:if="${error != null}" th:text="${error}" class="error text-center mt-3"></p>
 </div>
 
+<footer class="footer">
+    <p>&copy; 2026 Goldencat Bank - Secure Banking Systems</p>
+</footer>
+
 <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+<script>
+    // Fetches the environment string (e.g., "V1-BLUE") from your BankController
+    fetch('/env')
+    .then(res => res.text())
+    .then(data => {
+        const banner = document.getElementById("envBanner");
+        const body = document.getElementById("mainBody");
+
+        banner.innerText = "Active Deployment: " + data;
+
+        if(data.includes("BLUE")){
+            // Blue Theme: Navy to Bright Blue Gradient
+            body.style.background = "linear-gradient(to right, #001f3f, #007bff)";
+            banner.style.backgroundColor = "#004085"; 
+        } 
+        else if(data.includes("GREEN")){
+            // Green Theme: Dark Forest to Emerald Gradient
+            body.style.background = "linear-gradient(to right, #0a2f10, #28a745)";
+            banner.style.backgroundColor = "#155724";
+        }
+    })
+    .catch(err => {
+        console.log("Could not fetch env info, using default gold theme.");
+        document.getElementById("envBanner").innerText = "Environment: Default (Gold)";
+    });
+</script>
 </body>
 </html>
