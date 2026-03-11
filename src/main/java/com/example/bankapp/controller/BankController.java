@@ -3,12 +3,14 @@ package com.example.bankapp.controller;
 import com.example.bankapp.model.Account;
 import com.example.bankapp.service.AccountService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value; // Required
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody; // Required
 
 import java.math.BigDecimal;
 
@@ -17,6 +19,20 @@ public class BankController {
 
     @Autowired
     private AccountService accountService;
+
+    // --- CRITICAL ADDITIONS FOR BLUE-GREEN VISUALS ---
+    @Value("${APP_ENV:UNKNOWN}")
+    private String appEnv;
+
+    @Value("${APP_VERSION:V0}")
+    private String appVersion;
+
+    @GetMapping("/env")
+    @ResponseBody
+    public String getEnv() {
+        return appVersion + "-" + appEnv; // Returns e.g., "V1-BLUE"
+    }
+    // ------------------------------------------------
 
     @GetMapping("/dashboard")
     public String dashboard(Model model) {
@@ -59,7 +75,6 @@ public class BankController {
     public String withdraw(@RequestParam BigDecimal amount, Model model) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         Account account = accountService.findAccountByUsername(username);
-
         try {
             accountService.withdraw(account, amount);
         } catch (RuntimeException e) {
@@ -67,7 +82,6 @@ public class BankController {
             model.addAttribute("account", account);
             return "dashboard";
         }
-
         return "redirect:/dashboard";
     }
 
@@ -83,7 +97,6 @@ public class BankController {
     public String transferAmount(@RequestParam String toUsername, @RequestParam BigDecimal amount, Model model) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         Account fromAccount = accountService.findAccountByUsername(username);
-
         try {
             accountService.transferAmount(fromAccount, toUsername, amount);
         } catch (RuntimeException e) {
@@ -91,8 +104,6 @@ public class BankController {
             model.addAttribute("account", fromAccount);
             return "dashboard";
         }
-
         return "redirect:/dashboard";
     }
-
 }
